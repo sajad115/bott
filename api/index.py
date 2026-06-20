@@ -16,17 +16,16 @@ GOOGLE_SHEET_URL = os.environ.get(
     'https://script.google.com/macros/s/AKfycbxcIAdUYH-GMwdk8DKerK1AkHkgvk8LQNbhCQttYlAXBTCema-tBlXko31XLWDgX6jJ/exec'
 )
 ADMIN_ID = int(os.environ.get('ADMIN_ID', '1682496497'))
-STATS_FILE = '/tmp/stats.json'  # Vercel يسمح بالكتابة فقط في مجلد tmp
+STATS_FILE = '/tmp/stats.json'
 
 bot = telebot.TeleBot(BOT_TOKEN, threaded=False)
-health_app = Flask(__name__)
+app = Flask(__name__)  # تم التعديل إلى app هنا لتوافق Vercel
 
-@health_app.route('/')
+@app.route('/')
 def index():
     return 'Bot Server is Running!', 200
 
-# المسار الذي سيرسل التليجرام الرسائل إليه
-@health_app.route('/webhook', methods=['POST'])
+@app.route('/webhook', methods=['POST'])
 def webhook():
     if request.headers.get('content-type') == 'application/json':
         json_string = request.get_data().decode('utf-8')
@@ -36,7 +35,6 @@ def webhook():
     else:
         return 'Invalid Content-Type', 403
 
-# ── Stats helpers ─────────────────────────────────────────────────────────────
 def load_stats():
     if not os.path.exists(STATS_FILE):
         return {'total': 0, 'by_province': {}, 'by_activity': {}}
@@ -59,13 +57,12 @@ def update_stats(data):
     stats['by_activity'][activity] = stats['by_activity'].get(activity, 0) + 1
     save_stats(stats)
 
-# ── Bot handlers ──────────────────────────────────────────────────────────────
 @bot.message_handler(commands=['start', 'help'])
 def send_welcome(message):
     welcome_text = (
         "أهلاً بك! يمكنك إرسال البيانات مباشرة بصيغة نصية واحدة، "
         "أو بالضغط على الزر أدناه لإرسال التقرير:\n\n"
-        "يرجى نسخ القالب التالي وملئه وإرساله في رسالة واحدة:\n\n"
+        "يرجى نسخ القالب التالي وملئه وإرساله in رسالة واحدة:\n\n"
         "المحافظة:\n"
         "المنطقة:\n"
         "التاريخ:\n"
@@ -234,6 +231,5 @@ def handle_report(message):
     except Exception as e:
         bot.reply_to(message, f"❌ حدث خطأ أثناء إرسال البيانات: {str(e)}")
 
-# لتشغيل السيرفر محلياً أو إذا تم استدعائه بواسطة Vercel
 if __name__ == '__main__':
-    health_app.run(host='0.0.0.0', port=8080)
+    app.run(host='0.0.0.0', port=8080)
