@@ -22,7 +22,7 @@ bot = telebot.TeleBot(BOT_TOKEN)
 
 # ── Flask health server (keeps Render alive / UptimeRobot ping) ──────────────
 health_app = Flask(__name__)
-
+app = health_app
 @health_app.route('/')
 @health_app.route('/api/healthz')
 def healthz():
