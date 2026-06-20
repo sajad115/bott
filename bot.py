@@ -3,7 +3,7 @@ import json
 import threading
 import requests
 from datetime import datetime
-from flask import Flask
+from flask import Flask, request
 import telebot
 from telebot import types
 
@@ -16,28 +16,35 @@ GOOGLE_SHEET_URL = os.environ.get(
     'https://script.google.com/macros/s/AKfycbxcIAdUYH-GMwdk8DKerK1AkHkgvk8LQNbhCQttYlAXBTCema-tBlXko31XLWDgX6jJ/exec'
 )
 ADMIN_ID = int(os.environ.get('ADMIN_ID', '1682496497'))
-STATS_FILE = 'stats.json'
+STATS_FILE = '/tmp/stats.json'  # Vercel يسمح بالكتابة فقط في مجلد tmp
 
-bot = telebot.TeleBot(BOT_TOKEN)
-
-# ── Flask health server (keeps Render alive / UptimeRobot ping) ──────────────
+bot = telebot.TeleBot(BOT_TOKEN, threaded=False)
 health_app = Flask(__name__)
-app = health_app
-@health_app.route('/')
-@health_app.route('/api/healthz')
-def healthz():
-    return 'OK', 200
 
-def run_health_server():
-    port = int(os.environ.get('PORT', 8080))
-    health_app.run(host='0.0.0.0', port=port)
+@health_app.route('/')
+def index():
+    return 'Bot Server is Running!', 200
+
+# المسار الذي سيرسل التليجرام الرسائل إليه
+@health_app.route('/webhook', methods=['POST'])
+def webhook():
+    if request.headers.get('content-type') == 'application/json':
+        json_string = request.get_data().decode('utf-8')
+        update = telebot.types.Update.de_json(json_string)
+        bot.process_new_updates([update])
+        return '', 200
+    else:
+        return 'Invalid Content-Type', 403
 
 # ── Stats helpers ─────────────────────────────────────────────────────────────
 def load_stats():
     if not os.path.exists(STATS_FILE):
         return {'total': 0, 'by_province': {}, 'by_activity': {}}
     with open(STATS_FILE, 'r', encoding='utf-8') as f:
-        return json.load(f)
+        try:
+            return json.load(f)
+        except:
+            return {'total': 0, 'by_province': {}, 'by_activity': {}}
 
 def save_stats(stats):
     with open(STATS_FILE, 'w', encoding='utf-8') as f:
@@ -74,7 +81,6 @@ def send_welcome(message):
     markup.add(types.KeyboardButton("إرسال تقرير جديد"))
     bot.reply_to(message, welcome_text, reply_markup=markup)
 
-
 @bot.message_handler(commands=['stats'])
 def send_stats(message):
     if message.from_user.id != ADMIN_ID:
@@ -87,11 +93,11 @@ def send_stats(message):
         return
 
     province_lines = "\n".join(
-        [f"  • {p}: {c}" for p, c in sorted(stats.get('by_province', {}).items(), key=lambda x: -x[1])]
-    ) or "  —"
+        [f"   • {p}: {c}" for p, c in sorted(stats.get('by_province', {}).items(), key=lambda x: -x[1])]
+    ) or "   —"
     activity_lines = "\n".join(
-        [f"  • {a}: {c}" for a, c in sorted(stats.get('by_activity', {}).items(), key=lambda x: -x[1])]
-    ) or "  —"
+        [f"   • {a}: {c}" for a, c in sorted(stats.get('by_activity', {}).items(), key=lambda x: -x[1])]
+    ) or "   —"
 
     stats_text = (
         f"📊 *إحصائيات التقارير*\n\n"
@@ -101,7 +107,6 @@ def send_stats(message):
     )
     bot.reply_to(message, stats_text, parse_mode='Markdown')
 
-
 @bot.message_handler(commands=['reset_stats'])
 def reset_stats_command(message):
     if message.from_user.id != ADMIN_ID:
@@ -109,7 +114,6 @@ def reset_stats_command(message):
         return
     save_stats({"total": 0, "by_province": {}, "by_activity": {}})
     bot.reply_to(message, "✅ تمت إعادة تصفير الإحصائيات بنجاح.\n📊 العداد يبدأ الآن من الصفر.")
-
 
 @bot.message_handler(func=lambda message: message.text == "إرسال تقرير جديد")
 def request_report(message):
@@ -127,7 +131,6 @@ def request_report(message):
         "عدد الفتية: "
     )
     bot.reply_to(message, template)
-
 
 @bot.message_handler(func=lambda message: True)
 def handle_report(message):
@@ -154,7 +157,7 @@ def handle_report(message):
         'اسم القائد':      get_field('اسم القائد'),
         'اسم مساعد القائد': get_field('اسم مساعد القائد'),
         'عدد الفتية':      get_field('عدد الفتية'),
-        'وقت التسجيل':     datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+        'وقت التسجيل':      datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
     }
 
     required = [
@@ -186,18 +189,13 @@ def handle_report(message):
     }
 
     try:
-        print(f"[DEBUG] Sending to Google Sheets: {payload}")
         response = requests.post(GOOGLE_SHEET_URL, json=payload, timeout=15, allow_redirects=False)
-        print(f"[DEBUG] Initial status: {response.status_code}")
-
         if response.status_code in (301, 302, 303, 307, 308):
             redirect_url = response.headers.get('Location')
             response = requests.get(redirect_url, timeout=15)
-            print(f"[DEBUG] Final status: {response.status_code}, body: {response.text[:200]}")
 
         response_text = response.text.strip()
         if '<html' in response_text.lower() or 'unable to open' in response_text.lower():
-            print(f"[ERROR] Google returned HTML error: {response_text[:200]}")
             bot.reply_to(message, "❌ فشل الحفظ في Google Sheets. تحقق من إعدادات النشر.")
             return
 
@@ -228,19 +226,14 @@ def handle_report(message):
         )
         try:
             bot.send_message(ADMIN_ID, notification, parse_mode='Markdown')
-        except Exception:
+        except:
             pass
 
     except requests.exceptions.Timeout:
         bot.reply_to(message, "❌ انتهت مهلة الاتصال بـ Google Sheets. حاول مرة أخرى.")
     except Exception as e:
-        print(f"[ERROR] {e}")
         bot.reply_to(message, f"❌ حدث خطأ أثناء إرسال البيانات: {str(e)}")
 
-
-# ── Entry point ───────────────────────────────────────────────────────────────
+# لتشغيل السيرفر محلياً أو إذا تم استدعائه بواسطة Vercel
 if __name__ == '__main__':
-    threading.Thread(target=run_health_server, daemon=True).start()
-    print(f"Health server started on port {os.environ.get('PORT', 8080)}")
-    print("البوت يعمل الآن...")
-    bot.infinity_polling()
+    health_app.run(host='0.0.0.0', port=8080)
