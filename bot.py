@@ -64,6 +64,7 @@ def handle_report(message):
                 return parts[1].strip() if len(parts) > 1 else ""
         return ""
 
+# استخراج البيانات حسب القالب في الصورة
     data = {
         'المحافظة': get_field('المحافظة'),
         'المنطقة': get_field('المنطقة'),
@@ -77,6 +78,7 @@ def handle_report(message):
         'عدد الفتية': get_field('عدد الفتية'),
         'وقت التسجيل': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
     }
+ 
 
     required = ['المحافظة', 'المنطقة', 'التاريخ', 'اسم الفرقة', 'الفئة', 'نوع النشاط', 'اسم النشاط', 'اسم القائد', 'اسم مساعد القائد', 'عدد الفتية']
     missing = [f for f in required if not data[f]]
