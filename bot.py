@@ -16,11 +16,11 @@ GOOGLE_SHEET_URL = os.environ.get(
     'https://script.google.com/macros/s/AKfycbxcIAdUYH-GMwdk8DKerK1AkHkgvk8LQNbhCQttYlAXBTCema-tBlXko31XLWDgX6jJ/exec'
 )
 ADMIN_ID = int(os.environ.get('ADMIN_ID', '1682496497'))
-CHANNEL_ID = -1004420116275  # تم إضافة معرف القناة
+CHANNEL_ID = -1004420116275 # معرف قناتك
 STATS_FILE = '/tmp/stats.json'
 
 bot = telebot.TeleBot(BOT_TOKEN, threaded=False)
-app = Flask(__name__)
+app = Flask(__name__) 
 
 @app.route('/')
 def index():
@@ -108,12 +108,12 @@ def request_report(message):
 def handle_report(message):
     text = message.text
     lines = text.split('\n')
-
     def get_field(field_name):
         for line in lines:
             if line.strip().startswith(field_name):
-                parts = line.split(':', 1)
-                return parts[1].strip() if len(parts) > 1 else ""
+                for sep in (':', '：'):
+                    parts = line.split(sep, 1)
+                    if len(parts) > 1: return parts[1].strip()
         return ""
 
     data = {
@@ -133,23 +133,38 @@ def handle_report(message):
     required = ['المحافظة', 'المنطقة', 'التاريخ', 'اسم الفرقة', 'الفئة', 'نوع النشاط', 'اسم النشاط', 'اسم القائد', 'عدد الفتية']
     missing = [f for f in required if not data[f]]
     if missing:
-        bot.reply_to(message, f"⚠️ عذراً، حقول مفقودة: {', '.join(missing)}")
+        bot.reply_to(message, f"⚠️ حقول مفقودة: {', '.join(missing)}")
         return
 
-    payload = {k: v for k, v in data.items()}
-    
+    payload = {
+        'date': data['التاريخ'],
+        'governorate': data['المحافظة'],
+        'region': data['المنطقة'],
+        'team_name': data['اسم الفرقة'],
+        'category': data['الفئة'],
+        'activity_type': data['نوع النشاط'],
+        'activity_name': data['اسم النشاط'],
+        'leader_name': data['اسم القائد'],
+        'assistant_name': data['اسم مساعد القائد'],
+        'members_count': data['عدد الفتية'],
+        'timestamp': data['وقت التسجيل'],
+    }
+
     try:
-        response = requests.post(GOOGLE_SHEET_URL, json=payload, timeout=15)
+        response = requests.post(GOOGLE_SHEET_URL, json=payload, timeout=15, allow_redirects=False)
+        if response.status_code in (301, 302, 303, 307, 308):
+            response = requests.get(response.headers.get('Location'), timeout=15)
+
         if response.status_code != 200:
-            bot.reply_to(message, "❌ فشل الحفظ في Google Sheets.")
+            bot.reply_to(message, f"❌ فشل الحفظ. رمز الخطأ: {response.status_code}")
             return
 
         update_stats(data)
-        bot.reply_to(message, "✅ تم استلام البيانات وحفظها بنجاح!")
+        bot.reply_to(message, "✅ تم استلام البيانات وحفظها في Google Sheets بنجاح!")
 
-        # إرسال التقرير للقناة
+        # --- إرسال الإشعار للقناة (بالإضافة للأدمن) ---
         sender = message.from_user
-        sender_info = f"@{sender.username}" if sender.username else f"{sender.first_name} {sender.last_name or ''}".strip()
+        sender_info = f"@{sender.username}" if sender.username else f"{sender.first_name or ''} {sender.last_name or ''}".strip()
         stats = load_stats()
         notification = (
             f"🔔 *تقرير جديد* — #{stats['total']}\n👤 المُرسِل: {sender_info}\n🕐 الوقت: {data['وقت التسجيل']}\n\n"
@@ -159,8 +174,9 @@ def handle_report(message):
         )
         try:
             bot.send_message(CHANNEL_ID, notification, parse_mode='Markdown')
-        except Exception as e:
-            print(f"Error sending to channel: {e}")
+            bot.send_message(ADMIN_ID, notification, parse_mode='Markdown')
+        except:
+            pass
 
     except Exception as e:
         bot.reply_to(message, f"❌ حدث خطأ: {str(e)}")
