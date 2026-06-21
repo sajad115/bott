@@ -16,11 +16,11 @@ GOOGLE_SHEET_URL = os.environ.get(
     'https://script.google.com/macros/s/AKfycbxcIAdUYH-GMwdk8DKerK1AkHkgvk8LQNbhCQttYlAXBTCema-tBlXko31XLWDgX6jJ/exec'
 )
 ADMIN_ID = int(os.environ.get('ADMIN_ID', '1682496497'))
-CHANNEL_ID = -1004420116275 # معرف قناتك
+CHANNEL_ID = -1004420116275  # هذا هو معرف قناتك
 STATS_FILE = '/tmp/stats.json'
 
 bot = telebot.TeleBot(BOT_TOKEN, threaded=False)
-app = Flask(__name__) 
+app = Flask(__name__)
 
 @app.route('/')
 def index():
@@ -63,7 +63,7 @@ def send_welcome(message):
     welcome_text = (
         "أهلاً بك! يمكنك إرسال البيانات مباشرة بصيغة نصية واحدة، "
         "أو بالضغط على الزر أدناه لإرسال التقرير:\n\n"
-        "يرجى نسخ القالب التالي وملئه وإرساله في رسالة واحدة:\n\n"
+        "يرجى نسخ القالب التالي وملئه وإرساله in رسالة واحدة:\n\n"
         "المحافظة:\nالمنطقة:\nالتاريخ:\nاسم الفرقة:\nالفئة:\n"
         "نوع النشاط:\nاسم النشاط:\nاسم القائد:\nاسم مساعد القائد:\nعدد الفتية:"
     )
@@ -97,17 +97,22 @@ def reset_stats_command(message):
         bot.reply_to(message, "⛔ غير مصرح لك باستخدام هذا الأمر.")
         return
     save_stats({"total": 0, "by_province": {}, "by_activity": {}})
-    bot.reply_to(message, "✅ تمت إعادة تصفير الإحصائيات بنجاح.")
+    bot.reply_to(message, "✅ تمت إعادة تصفير الإحصائيات بنجاح.\n📊 العداد يبدأ الآن من الصفر.")
 
 @bot.message_handler(func=lambda message: message.text == "إرسال تقرير جديد")
 def request_report(message):
-    template = ("المحافظة:\nالمنطقة:\nالتاريخ:\nاسم الفرقة:\nالفئة:\nنوع النشاط:\nاسم النشاط:\nاسم القائد:\nاسم مساعد القائد:\nعدد الفتية:")
-    bot.reply_to(message, "قم بنسخ النص التالي، املأ الفراغات ثم أرسله:\n\n" + template)
+    template = (
+        "قم بنسخ النص التالي، املأ الفراغات ثم أرسله:\n\n"
+        "المحافظة: \nالمنطقة: \nالتاريخ: \nاسم الفرقة: \nالفئة: \n"
+        "نوع النشاط: \nاسم النشاط: \nاسم القائد: \nاسم مساعد القائد: \nعدد الفتية: "
+    )
+    bot.reply_to(message, template)
 
 @bot.message_handler(func=lambda message: True)
 def handle_report(message):
     text = message.text
     lines = text.split('\n')
+
     def get_field(field_name):
         for line in lines:
             if line.strip().startswith(field_name):
@@ -130,10 +135,14 @@ def handle_report(message):
         'وقت التسجيل': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
     }
 
-    required = ['المحافظة', 'المنطقة', 'التاريخ', 'اسم الفرقة', 'الفئة', 'نوع النشاط', 'اسم النشاط', 'اسم القائد', 'عدد الفتية']
+    # هنا القائمة الأصلية الخاصة بك (بدون مساعد القائد)
+    required = [
+        'المحافظة', 'المنطقة', 'التاريخ', 'اسم الفرقة',
+        'الفئة', 'نوع النشاط', 'اسم النشاط', 'اسم القائد', 'عدد الفتية'
+    ]
     missing = [f for f in required if not data[f]]
     if missing:
-        bot.reply_to(message, f"⚠️ حقول مفقودة: {', '.join(missing)}")
+        bot.reply_to(message, f"⚠️ عذراً، لم يتم حفظ التقرير لوجود حقول مفقودة: {', '.join(missing)}")
         return
 
     payload = {
@@ -162,7 +171,7 @@ def handle_report(message):
         update_stats(data)
         bot.reply_to(message, "✅ تم استلام البيانات وحفظها في Google Sheets بنجاح!")
 
-        # --- إرسال الإشعار للقناة (بالإضافة للأدمن) ---
+        # --- الجزء المضاف للإشعار ---
         sender = message.from_user
         sender_info = f"@{sender.username}" if sender.username else f"{sender.first_name or ''} {sender.last_name or ''}".strip()
         stats = load_stats()
@@ -174,7 +183,6 @@ def handle_report(message):
         )
         try:
             bot.send_message(CHANNEL_ID, notification, parse_mode='Markdown')
-            bot.send_message(ADMIN_ID, notification, parse_mode='Markdown')
         except:
             pass
 
