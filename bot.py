@@ -15,18 +15,18 @@ STATS_FILE = '/tmp/stats.json'
 bot = telebot.TeleBot(BOT_TOKEN, threaded=False)
 app = Flask(__name__)
 
-# --- وظائف الإحصائيات ---
+# --- دالة تحميل وحفظ الإحصائيات ---
 def load_stats():
-    if not os.path.exists(STATS_FILE): return {'total': 0, 'reports': []}
+    if not os.path.exists(STATS_FILE): return {'reports': []}
     with open(STATS_FILE, 'r', encoding='utf-8') as f:
         try: return json.load(f)
-        except: return {'total': 0, 'reports': []}
+        except: return {'reports': []}
 
 def save_stats(stats):
     with open(STATS_FILE, 'w', encoding='utf-8') as f:
         json.dump(stats, f, ensure_ascii=False, indent=2)
 
-# --- الأوامر ---
+# --- أوامر البوت ---
 @bot.message_handler(commands=['start', 'help'])
 def send_welcome(message):
     welcome_text = (
@@ -45,31 +45,40 @@ def request_report(message):
 
 @bot.message_handler(commands=['stats'])
 def send_stats(message):
-    if message.from_user.id != ADMIN_ID: return
+    args = message.text.split()
+    target_month = args[1] if len(args) > 1 else None # مثال: /stats 06
     stats = load_stats()
-    if not stats['reports']:
-        bot.reply_to(message, "📊 لا توجد تقارير مسجلة.")
+    summary = {}
+
+    for r in stats.get('reports', []):
+        if target_month and target_month not in r.get('التاريخ', ''): continue
+        prov = r.get('المحافظة', 'غير محدد')
+        summary[prov] = summary.get(prov, 0) + 1
+
+    if not summary:
+        bot.reply_to(message, "📊 لا توجد أنشطة مسجلة للفترة المطلوبة.")
         return
-    report_text = "📋 *تقرير النشاطات الشامل:*\n\n"
-    for r in stats['reports']:
-        report_text += f"🗺️ {r['المحافظة']} | 🏕️ {r['الفرقة']} | 🧒 {r['العدد']}\n"
-    bot.reply_to(message, report_text, parse_mode='Markdown')
+
+    text = f"📊 *تقرير الأنشطة {f'لشهر {target_month}' if target_month else 'العام'}:*\n\n"
+    for prov, count in summary.items():
+        text += f"🗺️ {prov}: {count} نشاط\n"
+    bot.reply_to(message, text, parse_mode='Markdown')
 
 @bot.message_handler(commands=['search'])
 def search_reports(message):
     args = message.text.split()
     if len(args) < 2:
-        bot.reply_to(message, "⚠️ يرجى تحديد اسم المحافظة للبحث. مثال:\n/search بغداد")
+        bot.reply_to(message, "⚠️ يرجى تحديد المحافظة. مثال: /search بغداد")
         return
     query = args[1]
     stats = load_stats()
     found = [r for r in stats.get('reports', []) if query in r.get('المحافظة', '')]
     if not found:
-        bot.reply_to(message, f"❌ لم يتم العثور على تقارير لـ: {query}")
+        bot.reply_to(message, "❌ لم يتم العثور على تقارير.")
         return
     response = f"🔍 *نتائج البحث عن {query}:*\n\n"
     for r in found[-5:]: 
-        response += f"🏕️ {r['الفرقة']} | 🧒 {r['العدد']}\n"
+        response += f"🏕️ {r['الفرقة']} | 🧒 عدد الفتية: {r['العدد']}\n"
     bot.reply_to(message, response, parse_mode='Markdown')
 
 # --- استقبال التقارير ---
@@ -97,7 +106,7 @@ def handle_report(message):
     }
 
     if any(not val for val in data.values()):
-        bot.reply_to(message, "⚠️ عذراً، لم يتم حفظ التقرير لأن بعض الحقول فارغة. يرجى التأكد من ملء القالب.")
+        bot.reply_to(message, "⚠️ عذراً، لم يتم حفظ التقرير لأن بعض الحقول فارغة.")
         return
 
     sender_info = f"@{message.from_user.username}" if message.from_user.username else message.from_user.first_name
@@ -112,7 +121,10 @@ def handle_report(message):
     try:
         requests.post(GOOGLE_SHEET_URL, json=payload, timeout=10)
         stats = load_stats()
-        stats['reports'].append({'المحافظة': data['المحافظة'], 'الفرقة': data['اسم الفرقة'], 'العدد': data['عدد الفتية']})
+        stats['reports'].append({
+            'المحافظة': data['المحافظة'], 'الفرقة': data['اسم الفرقة'], 
+            'العدد': data['عدد الفتية'], 'التاريخ': data['التاريخ']
+        })
         save_stats(stats)
         bot.reply_to(message, "✅ تم الحفظ بنجاح!")
         try: bot.send_message(CHANNEL_ID, f"🔔 تقرير جديد من {sender_info}\n\n" + message.text)
