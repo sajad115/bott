@@ -112,13 +112,12 @@ def request_report(message):
 def handle_report(message):
     text = message.text
     lines = text.split('\n')
-
+    
     def get_field(field_name):
         for line in lines:
             if line.strip().startswith(field_name):
-                for sep in (':', '：'):
-                    parts = line.split(sep, 1)
-                    if len(parts) > 1: return parts[1].strip()
+                parts = line.split(':', 1)
+                return parts[1].strip() if len(parts) > 1 else ""
         return ""
 
     data = {
@@ -133,6 +132,31 @@ def handle_report(message):
         'اسم مساعد القائد': get_field('اسم مساعد القائد'),
         'عدد الفتية': get_field('عدد الفتية'),
         'وقت التسجيل': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+    }
+
+    # القائمة "الإجبارية" فقط (بدون اسم مساعد القائد)
+    required_fields = ['المحافظة', 'المنطقة', 'التاريخ', 'اسم الفرقة', 'الفئة', 'نوع النشاط', 'اسم النشاط', 'اسم القائد', 'عدد الفتية']
+    
+    # فحص الحقول المفقودة
+    missing = [f for f in required_fields if not data.get(f)]
+    
+    if missing:
+        bot.reply_to(message, f"⚠️ يرجى ملء الحقول الإجبارية التالية: {', '.join(missing)}")
+        return
+
+    # إذا وصل الكود لهنا، فهذا يعني أن كل شيء تمام
+    payload = {
+        'date': data['التاريخ'],
+        'governorate': data['المحافظة'],
+        'region': data['المنطقة'],
+        'team_name': data['اسم الفرقة'],
+        'category': data['الفئة'],
+        'activity_type': data['نوع النشاط'],
+        'activity_name': data['اسم النشاط'],
+        'leader_name': data['اسم القائد'],
+        'assistant_name': data['اسم مساعد القائد'], # سيُرسل كـ نص فارغ إذا لم يملأه المستخدم
+        'members_count': data['عدد الفتية'],
+        'timestamp': data['وقت التسجيل'],
     }
 
     # هنا القائمة الأصلية الخاصة بك (بدون مساعد القائد)
