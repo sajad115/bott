@@ -15,7 +15,7 @@ STATS_FILE = '/tmp/stats.json'
 bot = telebot.TeleBot(BOT_TOKEN, threaded=False)
 app = Flask(__name__)
 
-# --- دالة تحميل وحفظ الإحصائيات ---
+# --- وظائف الإحصائيات ---
 def load_stats():
     if not os.path.exists(STATS_FILE): return {'reports': []}
     with open(STATS_FILE, 'r', encoding='utf-8') as f:
@@ -26,7 +26,7 @@ def save_stats(stats):
     with open(STATS_FILE, 'w', encoding='utf-8') as f:
         json.dump(stats, f, ensure_ascii=False, indent=2)
 
-# --- أوامر البوت ---
+# --- الأوامر الأساسية ---
 @bot.message_handler(commands=['start', 'help'])
 def send_welcome(message):
     welcome_text = (
@@ -43,32 +43,43 @@ def request_report(message):
     template = ("المحافظة:\nالمنطقة:\nالتاريخ:\nاسم الفرقة:\nالفئة:\nنوع النشاط:\nاسم النشاط:\nاسم القائد:\nاسم مساعد القائد:\nعدد الفتية:")
     bot.reply_to(message, "قم بنسخ النص التالي، املأ الفراغات ثم أرسله:\n\n" + template)
 
+# --- دالة التقرير الشامل (المحافظات والفرق) ---
 @bot.message_handler(commands=['stats'])
 def send_stats(message):
-    args = message.text.split()
-    target_month = args[1] if len(args) > 1 else None # مثال: /stats 06
+    if message.from_user.id != ADMIN_ID: return
+    
     stats = load_stats()
-    summary = {}
-
-    for r in stats.get('reports', []):
-        if target_month and target_month not in r.get('التاريخ', ''): continue
-        prov = r.get('المحافظة', 'غير محدد')
-        summary[prov] = summary.get(prov, 0) + 1
-
-    if not summary:
-        bot.reply_to(message, "📊 لا توجد أنشطة مسجلة للفترة المطلوبة.")
+    if not stats.get('reports'):
+        bot.reply_to(message, "📊 لا توجد تقارير مسجلة.")
         return
 
-    text = f"📊 *تقرير الأنشطة {f'لشهر {target_month}' if target_month else 'العام'}:*\n\n"
-    for prov, count in summary.items():
-        text += f"🗺️ {prov}: {count} نشاط\n"
-    bot.reply_to(message, text, parse_mode='Markdown')
+    prov_counts = {}
+    team_counts = {}
 
+    for r in stats['reports']:
+        prov = r.get('المحافظة', 'غير محدد')
+        team = r.get('الفرقة', 'غير محدد')
+        
+        prov_counts[prov] = prov_counts.get(prov, 0) + 1
+        key = (prov, team)
+        team_counts[key] = team_counts.get(key, 0) + 1
+
+    report = "📋 *تقرير الإنجاز الشامل:*\n\n"
+    for prov, p_count in prov_counts.items():
+        report += f"🗺️ *{prov}* ({p_count} نشاط):\n"
+        for (p, t), t_count in team_counts.items():
+            if p == prov:
+                report += f"   • {t}: {t_count} نشاط\n"
+        report += "\n"
+    
+    bot.reply_to(message, report, parse_mode='Markdown')
+
+# --- دالة البحث ---
 @bot.message_handler(commands=['search'])
 def search_reports(message):
     args = message.text.split()
     if len(args) < 2:
-        bot.reply_to(message, "⚠️ يرجى تحديد المحافظة. مثال: /search بغداد")
+        bot.reply_to(message, "⚠️ يرجى تحديد اسم المحافظة للبحث.")
         return
     query = args[1]
     stats = load_stats()
@@ -81,7 +92,7 @@ def search_reports(message):
         response += f"🏕️ {r['الفرقة']} | 🧒 عدد الفتية: {r['العدد']}\n"
     bot.reply_to(message, response, parse_mode='Markdown')
 
-# --- استقبال التقارير ---
+# --- معالجة التقارير ---
 @bot.message_handler(func=lambda message: not message.text.startswith('/') and message.text != "إرسال تقرير جديد")
 def handle_report(message):
     lines = message.text.split('\n')
@@ -106,7 +117,7 @@ def handle_report(message):
     }
 
     if any(not val for val in data.values()):
-        bot.reply_to(message, "⚠️ عذراً، لم يتم حفظ التقرير لأن بعض الحقول فارغة.")
+        bot.reply_to(message, "⚠️ عذراً، لم يتم حفظ التقرير لوجود حقول فارغة.")
         return
 
     sender_info = f"@{message.from_user.username}" if message.from_user.username else message.from_user.first_name
