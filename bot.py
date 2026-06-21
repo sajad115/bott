@@ -16,11 +16,11 @@ GOOGLE_SHEET_URL = os.environ.get(
     'https://script.google.com/macros/s/AKfycbxcIAdUYH-GMwdk8DKerK1AkHkgvk8LQNbhCQttYlAXBTCema-tBlXko31XLWDgX6jJ/exec'
 )
 ADMIN_ID = int(os.environ.get('ADMIN_ID', '1682496497'))
-CHANNEL_ID = -1004420116275  # هذا هو معرف قناتك
+CHANNEL_ID = -1004420116275  # هذا السطر الوحيد الذي أضفته
 STATS_FILE = '/tmp/stats.json'
 
 bot = telebot.TeleBot(BOT_TOKEN, threaded=False)
-app = Flask(__name__)
+app = Flask(__name__) 
 
 @app.route('/')
 def index():
@@ -64,8 +64,16 @@ def send_welcome(message):
         "أهلاً بك! يمكنك إرسال البيانات مباشرة بصيغة نصية واحدة، "
         "أو بالضغط على الزر أدناه لإرسال التقرير:\n\n"
         "يرجى نسخ القالب التالي وملئه وإرساله in رسالة واحدة:\n\n"
-        "المحافظة:\nالمنطقة:\nالتاريخ:\nاسم الفرقة:\nالفئة:\n"
-        "نوع النشاط:\nاسم النشاط:\nاسم القائد:\nاسم مساعد القائد:\nعدد الفتية:"
+        "المحافظة:\n"
+        "المنطقة:\n"
+        "التاريخ:\n"
+        "اسم الفرقة:\n"
+        "الفئة:\n"
+        "نوع النشاط:\n"
+        "اسم النشاط:\n"
+        "اسم القائد:\n"
+        "اسم مساعد القائد:\n"
+        "عدد الفتية:"
     )
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
     markup.add(types.KeyboardButton("إرسال تقرير جديد"))
@@ -82,12 +90,18 @@ def send_stats(message):
         bot.reply_to(message, "📊 لا توجد تقارير مسجلة حتى الآن.")
         return
 
-    province_lines = "\n".join([f"   • {p}: {c}" for p, c in sorted(stats.get('by_province', {}).items(), key=lambda x: -x[1])]) or "   —"
-    activity_lines = "\n".join([f"   • {a}: {c}" for a, c in sorted(stats.get('by_activity', {}).items(), key=lambda x: -x[1])]) or "   —"
+    province_lines = "\n".join(
+        [f"   • {p}: {c}" for p, c in sorted(stats.get('by_province', {}).items(), key=lambda x: -x[1])]
+    ) or "   —"
+    activity_lines = "\n".join(
+        [f"   • {a}: {c}" for a, c in sorted(stats.get('by_activity', {}).items(), key=lambda x: -x[1])]
+    ) or "   —"
 
     stats_text = (
-        f"📊 *إحصائيات التقارير*\n\n📋 إجمالي التقارير: *{total}*\n\n"
-        f"🗺️ *توزيع حسب المحافظة:*\n{province_lines}\n\n⚡ *توزيع حسب نوع النشاط:*\n{activity_lines}"
+        f"📊 *إحصائيات التقارير*\n\n"
+        f"📋 إجمالي التقارير: *{total}*\n\n"
+        f"🗺️ *توزيع حسب المحافظة:*\n{province_lines}\n\n"
+        f"⚡ *توزيع حسب نوع النشاط:*\n{activity_lines}"
     )
     bot.reply_to(message, stats_text, parse_mode='Markdown')
 
@@ -103,8 +117,16 @@ def reset_stats_command(message):
 def request_report(message):
     template = (
         "قم بنسخ النص التالي، املأ الفراغات ثم أرسله:\n\n"
-        "المحافظة: \nالمنطقة: \nالتاريخ: \nاسم الفرقة: \nالفئة: \n"
-        "نوع النشاط: \nاسم النشاط: \nاسم القائد: \nاسم مساعد القائد: \nعدد الفتية: "
+        "المحافظة: \n"
+        "المنطقة: \n"
+        "التاريخ: \n"
+        "اسم الفرقة: \n"
+        "الفئة: \n"
+        "نوع النشاط: \n"
+        "اسم النشاط: \n"
+        "اسم القائد: \n"
+        "اسم مساعد القائد: \n"
+        "عدد الفتية: "
     )
     bot.reply_to(message, template)
 
@@ -112,86 +134,68 @@ def request_report(message):
 def handle_report(message):
     text = message.text
     lines = text.split('\n')
-    
+
     def get_field(field_name):
         for line in lines:
             if line.strip().startswith(field_name):
-                parts = line.split(':', 1)
-                return parts[1].strip() if len(parts) > 1 else ""
+                for sep in (':', '：'):
+                    parts = line.split(sep, 1)
+                    if len(parts) > 1:
+                        return parts[1].strip()
         return ""
 
     data = {
-        'المحافظة': get_field('المحافظة'),
-        'المنطقة': get_field('المنطقة'),
-        'التاريخ': get_field('التاريخ'),
-        'اسم الفرقة': get_field('اسم الفرقة'),
-        'الفئة': get_field('الفئة'),
-        'نوع النشاط': get_field('نوع النشاط'),
-        'اسم النشاط': get_field('اسم النشاط'),
-        'اسم القائد': get_field('اسم القائد'),
+        'المحافظة':      get_field('المحافظة'),
+        'المنطقة':       get_field('المنطقة'),
+        'التاريخ':       get_field('التاريخ'),
+        'اسم الفرقة':     get_field('اسم الفرقة'),
+        'الفئة':          get_field('الفئة'),
+        'نوع النشاط':     get_field('نوع النشاط'),
+        'اسم النشاط':     get_field('اسم النشاط'),
+        'اسم القائد':     get_field('اسم القائد'),
         'اسم مساعد القائد': get_field('اسم مساعد القائد'),
-        'عدد الفتية': get_field('عدد الفتية'),
-        'وقت التسجيل': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+        'عدد الفتية':     get_field('عدد الفتية'),
+        'وقت التسجيل':     datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
     }
 
-    # القائمة "الإجبارية" فقط (بدون اسم مساعد القائد)
-    required_fields = ['المحافظة', 'المنطقة', 'التاريخ', 'اسم الفرقة', 'الفئة', 'نوع النشاط', 'اسم النشاط', 'اسم القائد', 'عدد الفتية']
-    
-    # فحص الحقول المفقودة
-    missing = [f for f in required_fields if not data.get(f)]
-    
-    if missing:
-        bot.reply_to(message, f"⚠️ يرجى ملء الحقول الإجبارية التالية: {', '.join(missing)}")
-        return
-
-    # إذا وصل الكود لهنا، فهذا يعني أن كل شيء تمام
-    payload = {
-        'date': data['التاريخ'],
-        'governorate': data['المحافظة'],
-        'region': data['المنطقة'],
-        'team_name': data['اسم الفرقة'],
-        'category': data['الفئة'],
-        'activity_type': data['نوع النشاط'],
-        'activity_name': data['اسم النشاط'],
-        'leader_name': data['اسم القائد'],
-        'assistant_name': data['اسم مساعد القائد'], # سيُرسل كـ نص فارغ إذا لم يملأه المستخدم
-        'members_count': data['عدد الفتية'],
-        'timestamp': data['وقت التسجيل'],
-    }
-
-    # هنا القائمة الأصلية الخاصة بك (بدون مساعد القائد)
-   # قائمة الحقول الإجبارية فقط (اسم مساعد القائد ليس من ضمنها)
     required = [
         'المحافظة', 'المنطقة', 'التاريخ', 'اسم الفرقة',
         'الفئة', 'نوع النشاط', 'اسم النشاط', 'اسم القائد', 'عدد الفتية'
     ]
-    
-    # التحقق من الحقول الإجبارية فقط
-    missing = [f for f in required if not data.get(f)]
-    
+    missing = [f for f in required if not data[f]]
     if missing:
-        bot.reply_to(message, f"⚠️ عذراً، لم يتم حفظ التقرير لوجود حقول مفقودة: {', '.join(missing)}")
+        bot.reply_to(
+            message,
+            f"⚠️ عذراً، لم يتم حفظ التقرير بسبب وجود حقول فارغة أو مفقودة:\n"
+            f"❌ ({', '.join(missing)})\n\n"
+            f"يرجى ملء كافة الحقول المذكورة وإعادة المحاولة."
+        )
         return
-   
 
     payload = {
-        'date': data['التاريخ'],
-        'governorate': data['المحافظة'],
-        'region': data['المنطقة'],
-        'team_name': data['اسم الفرقة'],
-        'category': data['الفئة'],
-        'activity_type': data['نوع النشاط'],
-        'activity_name': data['اسم النشاط'],
-        'leader_name': data['اسم القائد'],
+        'date':           data['التاريخ'],
+        'governorate':    data['المحافظة'],
+        'region':         data['المنطقة'],
+        'team_name':      data['اسم الفرقة'],
+        'category':       data['الفئة'],
+        'activity_type':  data['نوع النشاط'],
+        'activity_name':  data['اسم النشاط'],
+        'leader_name':    data['اسم القائد'],
         'assistant_name': data['اسم مساعد القائد'],
-        'members_count': data['عدد الفتية'],
-        'timestamp': data['وقت التسجيل'],
+        'members_count':  data['عدد الفتية'],
+        'timestamp':      data['وقت التسجيل'],
     }
 
     try:
         response = requests.post(GOOGLE_SHEET_URL, json=payload, timeout=15, allow_redirects=False)
         if response.status_code in (301, 302, 303, 307, 308):
-            response = requests.get(response.headers.get('Location'), timeout=15)
+            redirect_url = response.headers.get('Location')
+            response = requests.get(redirect_url, timeout=15)
+
+        response_text = response.text.strip()
+        if '<html' in response_text.lower() or 'unable to open' in response_text.lower():
+            bot.reply_to(message, "❌ فشل الحفظ في Google Sheets. تحقق من إعدادات النشر.")
+            return
 
         if response.status_code != 200:
             bot.reply_to(message, f"❌ فشل الحفظ. رمز الخطأ: {response.status_code}")
@@ -200,23 +204,34 @@ def handle_report(message):
         update_stats(data)
         bot.reply_to(message, "✅ تم استلام البيانات وحفظها في Google Sheets بنجاح!")
 
-        # --- الجزء المضاف للإشعار ---
+        # --- الجزء الوحيد المضاف للإشعار ---
         sender = message.from_user
         sender_info = f"@{sender.username}" if sender.username else f"{sender.first_name or ''} {sender.last_name or ''}".strip()
         stats = load_stats()
         notification = (
-            f"🔔 *تقرير جديد* — #{stats['total']}\n👤 المُرسِل: {sender_info}\n🕐 الوقت: {data['وقت التسجيل']}\n\n"
-            f"🗺️ المحافظة: {data['المحافظة']}\n📍 المنطقة: {data['المنطقة']}\n📅 التاريخ: {data['التاريخ']}\n"
-            f"🏕️ اسم الفرقة: {data['اسم الفرقة']}\n👥 الفئة: {data['الفئة']}\n⚡ نوع النشاط: {data['نوع النشاط']}\n"
-            f"📝 اسم النشاط: {data['اسم النشاط']}\n👨‍✈️ اسم القائد: {data['اسم القائد']}\n🤝 مساعد القائد: {data['اسم مساعد القائد'] or '—'}\n🧒 عدد الفتية: {data['عدد الفتية']}"
+            f"🔔 *تقرير جديد* — #{stats['total']}\n"
+            f"👤 المُرسِل: {sender_info}\n"
+            f"🕐 الوقت: {data['وقت التسجيل']}\n\n"
+            f"🗺️ المحافظة: {data['المحافظة']}\n"
+            f"📍 المنطقة: {data['المنطقة']}\n"
+            f"📅 التاريخ: {data['التاريخ']}\n"
+            f"🏕️ اسم الفرقة: {data['اسم الفرقة']}\n"
+            f"👥 الفئة: {data['الفئة']}\n"
+            f"⚡ نوع النشاط: {data['نوع النشاط']}\n"
+            f"📝 اسم النشاط: {data['اسم النشاط']}\n"
+            f"👨‍✈️ اسم القائد: {data['اسم القائد']}\n"
+            f"🤝 مساعد القائد: {data['اسم مساعد القائد'] or '—'}\n"
+            f"🧒 عدد الفتية: {data['عدد الفتية']}"
         )
         try:
             bot.send_message(CHANNEL_ID, notification, parse_mode='Markdown')
         except:
             pass
 
+    except requests.exceptions.Timeout:
+        bot.reply_to(message, "❌ انتهت مهلة الاتصال بـ Google Sheets. حاول مرة أخرى.")
     except Exception as e:
-        bot.reply_to(message, f"❌ حدث خطأ: {str(e)}")
+        bot.reply_to(message, f"❌ حدث خطأ أثناء إرسال البيانات: {str(e)}")
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8080)
