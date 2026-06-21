@@ -221,8 +221,10 @@ def handle_report(message):
             f"🤝 مساعد القائد: {data['اسم مساعد القائد'] or '—'}\n"
             f"🧒 عدد الفتية: {data['عدد الفتية']}"
         )
+        CHANNEL_ID = -1004420116275
         try:
-            bot.send_message(ADMIN_ID, notification, parse_mode='Markdown')
+           bot.send_message(CHANNEL_ID, notification, parse_mode='Markdown')
+            bot.send_message(ADMIN_ID, notification, parse_mode='Markdown') # اختيارياً: نسخة لك
         except:
             pass
 
