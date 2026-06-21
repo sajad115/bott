@@ -95,14 +95,17 @@ def handle_report(message):
         requests.post(GOOGLE_SHEET_URL, json=data, timeout=10)
         update_stats(data)
         bot.reply_to(message, "✅ تم الحفظ بنجاح!")
-        # استخراج معلومات المرسل
-        sender = message.from_user
-        sender_info = f"@{sender.username}" if sender.username else f"{sender.first_name or ''} {sender.last_name or ''}".strip()
-        # إرسال للقناة
-       # هذا هو نص التنبيه الكامل كما كنت تريده
-        notification = (
-            f"🔔 *تقرير جديد* — #{load_stats()['total']}\n\n"
-            f"🗺️ المحافظة: {data['المحافظة']}\n"
+       # استخراج معلومات المرسل
+    sender = message.from_user
+    sender_name = f"{sender.first_name} {sender.last_name or ''}".strip()
+    sender_username = f" (@{sender.username})" if sender.username else ""
+    sender_info = f"{sender_name}{sender_username}"
+
+    # أضف سطر المرسل إلى نص الإشعارات (notification)
+    notification = (
+        f"🔔 *تقرير جديد*\n"
+        f"👤 المُرسِل: {sender_info}\n\n"  # <--- هذا هو السطر الجديد
+        f"🗺️ المحافظة: {data['المحافظة']}\n"
             f"📍 المنطقة: {data['المنطقة']}\n"
             f"📅 التاريخ: {data['التاريخ']}\n"
             f"🏕️ اسم الفرقة: {data['اسم الفرقة']}\n"
