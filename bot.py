@@ -1,34 +1,114 @@
 import os
 import json
+import threading
 import requests
 from datetime import datetime
 from flask import Flask, request
 import telebot
 from telebot import types
 
-# الإعدادات
 BOT_TOKEN = os.environ.get('BOT_TOKEN')
-GOOGLE_SHEET_URL = os.environ.get('GOOGLE_SHEET_URL')
+if not BOT_TOKEN:
+    raise ValueError("BOT_TOKEN environment variable is not set.")
+
+GOOGLE_SHEET_URL = os.environ.get(
+    'GOOGLE_SHEET_URL',
+    'https://script.google.com/macros/s/AKfycbxcIAdUYH-GMwdk8DKerK1AkHkgvk8LQNbhCQttYlAXBTCema-tBlXko31XLWDgX6jJ/exec'
+)
 ADMIN_ID = int(os.environ.get('ADMIN_ID', '1682496497'))
-CHANNEL_ID = -1004420116275 
+CHANNEL_ID = -1004420116275  # تم إضافة معرف القناة
+STATS_FILE = '/tmp/stats.json'
 
 bot = telebot.TeleBot(BOT_TOKEN, threaded=False)
-app = Flask(__name__)  # ضروري لـ Vercel
+app = Flask(__name__)
+
+@app.route('/')
+def index():
+    return 'Bot Server is Running!', 200
 
 @app.route('/webhook', methods=['POST'])
 def webhook():
-    json_string = request.get_data().decode('utf-8')
-    update = telebot.types.Update.de_json(json_string)
-    bot.process_new_updates([update])
-    return '', 200
+    if request.headers.get('content-type') == 'application/json':
+        json_string = request.get_data().decode('utf-8')
+        update = telebot.types.Update.de_json(json_string)
+        bot.process_new_updates([update])
+        return '', 200
+    else:
+        return 'Invalid Content-Type', 403
+
+def load_stats():
+    if not os.path.exists(STATS_FILE):
+        return {'total': 0, 'by_province': {}, 'by_activity': {}}
+    with open(STATS_FILE, 'r', encoding='utf-8') as f:
+        try:
+            return json.load(f)
+        except:
+            return {'total': 0, 'by_province': {}, 'by_activity': {}}
+
+def save_stats(stats):
+    with open(STATS_FILE, 'w', encoding='utf-8') as f:
+        json.dump(stats, f, ensure_ascii=False, indent=2)
+
+def update_stats(data):
+    stats = load_stats()
+    stats['total'] += 1
+    province = data.get('المحافظة', 'غير محدد')
+    activity = data.get('نوع النشاط', 'غير محدد')
+    stats['by_province'][province] = stats['by_province'].get(province, 0) + 1
+    stats['by_activity'][activity] = stats['by_activity'].get(activity, 0) + 1
+    save_stats(stats)
+
+@bot.message_handler(commands=['start', 'help'])
+def send_welcome(message):
+    welcome_text = (
+        "أهلاً بك! يمكنك إرسال البيانات مباشرة بصيغة نصية واحدة، "
+        "أو بالضغط على الزر أدناه لإرسال التقرير:\n\n"
+        "يرجى نسخ القالب التالي وملئه وإرساله في رسالة واحدة:\n\n"
+        "المحافظة:\nالمنطقة:\nالتاريخ:\nاسم الفرقة:\nالفئة:\n"
+        "نوع النشاط:\nاسم النشاط:\nاسم القائد:\nاسم مساعد القائد:\nعدد الفتية:"
+    )
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    markup.add(types.KeyboardButton("إرسال تقرير جديد"))
+    bot.reply_to(message, welcome_text, reply_markup=markup)
+
+@bot.message_handler(commands=['stats'])
+def send_stats(message):
+    if message.from_user.id != ADMIN_ID:
+        bot.reply_to(message, "⛔ غير مصرح لك باستخدام هذا الأمر.")
+        return
+    stats = load_stats()
+    total = stats.get('total', 0)
+    if total == 0:
+        bot.reply_to(message, "📊 لا توجد تقارير مسجلة حتى الآن.")
+        return
+
+    province_lines = "\n".join([f"   • {p}: {c}" for p, c in sorted(stats.get('by_province', {}).items(), key=lambda x: -x[1])]) or "   —"
+    activity_lines = "\n".join([f"   • {a}: {c}" for a, c in sorted(stats.get('by_activity', {}).items(), key=lambda x: -x[1])]) or "   —"
+
+    stats_text = (
+        f"📊 *إحصائيات التقارير*\n\n📋 إجمالي التقارير: *{total}*\n\n"
+        f"🗺️ *توزيع حسب المحافظة:*\n{province_lines}\n\n⚡ *توزيع حسب نوع النشاط:*\n{activity_lines}"
+    )
+    bot.reply_to(message, stats_text, parse_mode='Markdown')
+
+@bot.message_handler(commands=['reset_stats'])
+def reset_stats_command(message):
+    if message.from_user.id != ADMIN_ID:
+        bot.reply_to(message, "⛔ غير مصرح لك باستخدام هذا الأمر.")
+        return
+    save_stats({"total": 0, "by_province": {}, "by_activity": {}})
+    bot.reply_to(message, "✅ تمت إعادة تصفير الإحصائيات بنجاح.")
+
+@bot.message_handler(func=lambda message: message.text == "إرسال تقرير جديد")
+def request_report(message):
+    template = ("المحافظة:\nالمنطقة:\nالتاريخ:\nاسم الفرقة:\nالفئة:\nنوع النشاط:\nاسم النشاط:\nاسم القائد:\nاسم مساعد القائد:\nعدد الفتية:")
+    bot.reply_to(message, "قم بنسخ النص التالي، املأ الفراغات ثم أرسله:\n\n" + template)
 
 @bot.message_handler(func=lambda message: True)
 def handle_report(message):
-    if message.text.startswith('/'): return
-    
-    # 1. استخراج الحقول من النص
     text = message.text
     lines = text.split('\n')
+
     def get_field(field_name):
         for line in lines:
             if line.strip().startswith(field_name):
@@ -50,38 +130,40 @@ def handle_report(message):
         'وقت التسجيل': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
     }
 
-    # 2. إضافة اسم المرسل
-    sender = message.from_user
-    sender_info = f"{sender.first_name} {sender.last_name or ''}".strip()
-    if sender.username: sender_info += f" (@{sender.username})"
-    data['اسم المرسل'] = sender_info
+    required = ['المحافظة', 'المنطقة', 'التاريخ', 'اسم الفرقة', 'الفئة', 'نوع النشاط', 'اسم النشاط', 'اسم القائد', 'عدد الفتية']
+    missing = [f for f in required if not data[f]]
+    if missing:
+        bot.reply_to(message, f"⚠️ عذراً، حقول مفقودة: {', '.join(missing)}")
+        return
 
-    # 3. محاولة الحفظ والإرسال
+    payload = {k: v for k, v in data.items()}
+    
     try:
-        requests.post(GOOGLE_SHEET_URL, json=data, timeout=15)
-        
-        # صياغة التقرير الكامل للقناة
+        response = requests.post(GOOGLE_SHEET_URL, json=payload, timeout=15)
+        if response.status_code != 200:
+            bot.reply_to(message, "❌ فشل الحفظ في Google Sheets.")
+            return
+
+        update_stats(data)
+        bot.reply_to(message, "✅ تم استلام البيانات وحفظها بنجاح!")
+
+        # إرسال التقرير للقناة
+        sender = message.from_user
+        sender_info = f"@{sender.username}" if sender.username else f"{sender.first_name} {sender.last_name or ''}".strip()
+        stats = load_stats()
         notification = (
-            f"🔔 *تقرير جديد*\n"
-            f"👤 المُرسِل: {sender_info}\n"
-            f"🕐 الوقت: {data['وقت التسجيل']}\n\n"
-            f"🗺️ المحافظة: {data['المحافظة']}\n"
-            f"📍 المنطقة: {data['المنطقة']}\n"
-            f"📅 التاريخ: {data['التاريخ']}\n"
-            f"🏕️ اسم الفرقة: {data['اسم الفرقة']}\n"
-            f"👥 الفئة: {data['الفئة']}\n"
-            f"⚡ نوع النشاط: {data['نوع النشاط']}\n"
-            f"📝 اسم النشاط: {data['اسم النشاط']}\n"
-            f"👨‍✈️ اسم القائد: {data['اسم القائد']}\n"
-            f"🤝 مساعد القائد: {data['اسم مساعد القائد'] or '—'}\n"
-            f"🧒 عدد الفتية: {data['عدد الفتية']}"
+            f"🔔 *تقرير جديد* — #{stats['total']}\n👤 المُرسِل: {sender_info}\n🕐 الوقت: {data['وقت التسجيل']}\n\n"
+            f"🗺️ المحافظة: {data['المحافظة']}\n📍 المنطقة: {data['المنطقة']}\n📅 التاريخ: {data['التاريخ']}\n"
+            f"🏕️ اسم الفرقة: {data['اسم الفرقة']}\n👥 الفئة: {data['الفئة']}\n⚡ نوع النشاط: {data['نوع النشاط']}\n"
+            f"📝 اسم النشاط: {data['اسم النشاط']}\n👨‍✈️ اسم القائد: {data['اسم القائد']}\n🤝 مساعد القائد: {data['اسم مساعد القائد'] or '—'}\n🧒 عدد الفتية: {data['عدد الفتية']}"
         )
-        
-        bot.send_message(CHANNEL_ID, notification, parse_mode='Markdown')
-        bot.reply_to(message, "✅ تم استلام البيانات وحفظها في Google Sheets وإرسالها للقناة بنجاح!")
-        
+        try:
+            bot.send_message(CHANNEL_ID, notification, parse_mode='Markdown')
+        except Exception as e:
+            print(f"Error sending to channel: {e}")
+
     except Exception as e:
-        bot.reply_to(message, f"❌ فشل الحفظ أو الإرسال: {str(e)}")
+        bot.reply_to(message, f"❌ حدث خطأ: {str(e)}")
 
 if __name__ == '__main__':
-    app.run()
+    app.run(host='0.0.0.0', port=8080)
