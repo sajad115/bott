@@ -19,7 +19,7 @@ ADMIN_ID = int(os.environ.get('ADMIN_ID', '1682496497'))
 STATS_FILE = '/tmp/stats.json'
 
 bot = telebot.TeleBot(BOT_TOKEN, threaded=False)
-app = Flask(__name__)  # تم التعديل إلى app هنا لتوافق Vercel
+app = Flask(__name__)  # <--- هذا هو السطر الذي يبحث عنه Vercel
 
 @app.route('/')
 def index():
