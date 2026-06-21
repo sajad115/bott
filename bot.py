@@ -42,8 +42,11 @@ def webhook():
         return '', 200
     return 'Forbidden', 403
 
-@bot.message_handler(func=lambda message: True)
+@bot.message_handler(func=lambda message: not message.text.startswith('/'))
 def handle_report(message):
+    if message.text == "إرسال تقرير جديد":
+        return # يتجاهل الزر لكي لا يعتبره تقريراً ناقصاً
+        
     text = message.text
     lines = text.split('\n')
 
