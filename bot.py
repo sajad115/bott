@@ -97,7 +97,20 @@ def handle_report(message):
         bot.reply_to(message, "✅ تم الحفظ بنجاح!")
         
         # إرسال للقناة
-        notification = f"🔔 *تقرير جديد* — #{load_stats()['total']}\n\n🗺️ المحافظة: {data['المحافظة']}\n🏕️ الفرقة: {data['اسم الفرقة']}\n👨‍✈️ القائد: {data['اسم القائد']}\n🧒 العدد: {data['عدد الفتية']}"
+       # هذا هو نص التنبيه الكامل كما كنت تريده
+        notification = (
+            f"🔔 *تقرير جديد* — #{load_stats()['total']}\n\n"
+            f"🗺️ المحافظة: {data['المحافظة']}\n"
+            f"📍 المنطقة: {data['المنطقة']}\n"
+            f"📅 التاريخ: {data['التاريخ']}\n"
+            f"🏕️ اسم الفرقة: {data['اسم الفرقة']}\n"
+            f"👥 الفئة: {data['الفئة']}\n"
+            f"⚡ نوع النشاط: {data['نوع النشاط']}\n"
+            f"📝 اسم النشاط: {data['اسم النشاط']}\n"
+            f"👨‍✈️ اسم القائد: {data['اسم القائد']}\n"
+            f"🤝 مساعد القائد: {data['اسم مساعد القائد'] or '—'}\n"
+            f"🧒 عدد الفتية: {data['عدد الفتية']}"
+        )
         bot.send_message(CHANNEL_ID, notification, parse_mode='Markdown')
     except Exception as e:
         bot.reply_to(message, f"❌ حدث خطأ: {str(e)}")
