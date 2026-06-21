@@ -104,7 +104,30 @@ def handle_report(message):
         'وقت التسجيل': data['وقت التسجيل'],
         'اسم المرسل': sender_info
     }
-
+@bot.message_handler(commands=['search'])
+def search_reports(message):
+    # مثال للاستخدام: /search بغداد
+    args = message.text.split()
+    if len(args) < 2:
+        bot.reply_to(message, "يرجى تحديد اسم المحافظة للبحث. مثال:\n/search بغداد")
+        return
+    
+    query = args[1]
+    stats = load_stats()
+    
+    # البحث في التقارير المسجلة
+    found = [r for r in stats.get('reports', []) if query in r['المحافظة']]
+    
+    if not found:
+        bot.reply_to(message, f"❌ لم يتم العثور على تقارير للمحافظة: {query}")
+        return
+    
+    # عرض آخر 5 تقارير للمحافظة المطلوبة
+    response = f"🔍 *آخر نتائج البحث عن {query}:*\n\n"
+    for r in found[-5:]: 
+        response += f"🏕️ الفرقة: {r['الفرقة']} | 🧒 العدد: {r['العدد']}\n"
+        
+    bot.reply_to(message, response, parse_mode='Markdown')
     try:
         response = requests.post(GOOGLE_SHEET_URL, json=payload, timeout=15)
         if response.status_code == 200:
