@@ -123,7 +123,7 @@ def handle_report(message):
 sender_info = f"@{message.from_user.username}" if message.from_user.username else message.from_user.first_name
     
     # الحصول على وقت التسجيل الحالي
-    current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+   sender_info = f"@{message.from_user.username}" if message.from_user.username else message.from_user.first_name
     
     payload = {
         'التاريخ': data['التاريخ'], 
@@ -136,7 +136,7 @@ sender_info = f"@{message.from_user.username}" if message.from_user.username els
         'اسم القائد': data['اسم القائد'],
         'اسم مساعد القائد': data['اسم مساعد القائد'], 
         'عدد الفتية': data['عدد الفتية'],
-        'وقت التسجيل': current_time,       # <--- أضف هذا السطر
+        'وقت التسجيل': datetime.now().strftime('%Y-%m-%d %H:%M:%S'), # <--- أضف هذا السطر
         'اسم المرسل': sender_info
     }
 
