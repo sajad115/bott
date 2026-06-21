@@ -120,12 +120,23 @@ def handle_report(message):
         bot.reply_to(message, "⚠️ عذراً، لم يتم حفظ التقرير لوجود حقول فارغة.")
         return
 
-    sender_info = f"@{message.from_user.username}" if message.from_user.username else message.from_user.first_name
+sender_info = f"@{message.from_user.username}" if message.from_user.username else message.from_user.first_name
+    
+    # الحصول على وقت التسجيل الحالي
+    current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    
     payload = {
-        'التاريخ': data['التاريخ'], 'المحافظة': data['المحافظة'], 'المنطقة': data['المنطقة'],
-        'اسم الفرقة': data['اسم الفرقة'], 'الفئة': data['الفئة'], 'نوع النشاط': data['نوع النشاط'],
-        'اسم النشاط': data['اسم النشاط'], 'اسم القائد': data['اسم القائد'],
-        'اسم مساعد القائد': data['اسم مساعد القائد'], 'عدد الفتية': data['عدد الفتية'],
+        'التاريخ': data['التاريخ'], 
+        'المحافظة': data['المحافظة'], 
+        'المنطقة': data['المنطقة'],
+        'اسم الفرقة': data['اسم الفرقة'], 
+        'الفئة': data['الفئة'], 
+        'نوع النشاط': data['نوع النشاط'],
+        'اسم النشاط': data['اسم النشاط'], 
+        'اسم القائد': data['اسم القائد'],
+        'اسم مساعد القائد': data['اسم مساعد القائد'], 
+        'عدد الفتية': data['عدد الفتية'],
+        'وقت التسجيل': current_time,       # <--- أضف هذا السطر
         'اسم المرسل': sender_info
     }
 
