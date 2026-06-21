@@ -14,7 +14,7 @@ STATS_FILE = '/tmp/stats.json'
 bot = telebot.TeleBot(BOT_TOKEN, threaded=False)
 app = Flask(__name__)
 
-# دالة مساعدة لترتيب الإحصائيات (كما في كودك)
+# --- وظائف الإحصائيات ---
 def load_stats():
     if not os.path.exists(STATS_FILE): return {'total': 0, 'by_province': {}, 'by_activity': {}}
     with open(STATS_FILE, 'r', encoding='utf-8') as f:
@@ -34,15 +34,25 @@ def update_stats(data):
     stats['by_activity'][activity] = stats['by_activity'].get(activity, 0) + 1
     save_stats(stats)
 
-@app.route('/webhook', methods=['POST'])
-def webhook():
-    if request.headers.get('content-type') == 'application/json':
-        update = telebot.types.Update.de_json(request.get_data().decode('utf-8'))
-        bot.process_new_updates([update])
-        return '', 200
-    return 'Forbidden', 403
+# --- أوامر البوت الأساسية ---
+@bot.message_handler(commands=['start', 'help'])
+def send_welcome(message):
+    welcome_text = (
+        "أهلاً بك! يرجى نسخ القالب التالي وملئه وإرساله في رسالة واحدة:\n\n"
+        "المحافظة:\nالمنطقة:\nالتاريخ:\nاسم الفرقة:\nالفئة:\n"
+        "نوع النشاط:\nاسم النشاط:\nاسم القائد:\nاسم مساعد القائد:\nعدد الفتية:"
+    )
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    markup.add(types.KeyboardButton("إرسال تقرير جديد"))
+    bot.reply_to(message, welcome_text, reply_markup=markup)
 
-@bot.message_handler(func=lambda message: True)
+@bot.message_handler(func=lambda message: message.text == "إرسال تقرير جديد")
+def request_report(message):
+    template = ("المحافظة:\nالمنطقة:\nالتاريخ:\nاسم الفرقة:\nالفئة:\nنوع النشاط:\nاسم النشاط:\nاسم القائد:\nاسم مساعد القائد:\nعدد الفتية:")
+    bot.reply_to(message, "قم بنسخ النص التالي، املأ الفراغات ثم أرسله:\n\n" + template)
+
+# --- معالجة التقارير ---
+@bot.message_handler(func=lambda message: not message.text.startswith('/') and message.text != "إرسال تقرير جديد")
 def handle_report(message):
     text = message.text
     lines = text.split('\n')
@@ -54,7 +64,6 @@ def handle_report(message):
                 return parts[1].strip() if len(parts) > 1 else ""
         return ""
 
-    # استخراج البيانات
     data = {
         'المحافظة': get_field('المحافظة'),
         'المنطقة': get_field('المنطقة'),
@@ -69,18 +78,16 @@ def handle_report(message):
         'وقت التسجيل': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
     }
 
-    # القائمة الإجبارية
     required = ['المحافظة', 'المنطقة', 'التاريخ', 'اسم الفرقة', 'الفئة', 'نوع النشاط', 'اسم النشاط', 'اسم القائد', 'اسم مساعد القائد', 'عدد الفتية']
     missing = [f for f in required if not data[f]]
+    
     if missing:
-        bot.reply_to(message, f"⚠️ حقول مفقودة: {', '.join(missing)}")
+        bot.reply_to(message, f"⚠️ حقول مفقودة يرجى التأكد من ملئها:\n{', '.join(missing)}")
         return
 
-    # تحديد المرسل
     sender = message.from_user
     sender_info = f"@{sender.username}" if sender.username else f"{sender.first_name} {sender.last_name or ''}".strip()
 
-    # الـ Payload مطابق تماماً للمفاتيح التي يتوقعها كود الـ doPost الخاص بك
     payload = {
         'التاريخ': data['التاريخ'],
         'المحافظة': data['المحافظة'],
@@ -100,15 +107,22 @@ def handle_report(message):
         response = requests.post(GOOGLE_SHEET_URL, json=payload, timeout=15)
         if response.status_code == 200:
             update_stats(data)
-            bot.reply_to(message, "✅ تم الحفظ بنجاح!")
-            # الإرسال للقناة
+            bot.reply_to(message, "✅ تم استلام البيانات وحفظها بنجاح!")
             try:
                 bot.send_message(CHANNEL_ID, f"🔔 تقرير جديد من {sender_info}\n\n" + text)
             except: pass
         else:
-            bot.reply_to(message, "❌ فشل الحفظ في الشيت.")
+            bot.reply_to(message, "❌ فشل الحفظ في Google Sheets.")
     except Exception as e:
         bot.reply_to(message, f"خطأ: {e}")
+
+@app.route('/webhook', methods=['POST'])
+def webhook():
+    if request.headers.get('content-type') == 'application/json':
+        update = telebot.types.Update.de_json(request.get_data().decode('utf-8'))
+        bot.process_new_updates([update])
+        return '', 200
+    return 'Forbidden', 403
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8080)
