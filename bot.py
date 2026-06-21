@@ -136,14 +136,19 @@ def handle_report(message):
     }
 
     # هنا القائمة الأصلية الخاصة بك (بدون مساعد القائد)
+   # قائمة الحقول الإجبارية فقط (اسم مساعد القائد ليس من ضمنها)
     required = [
         'المحافظة', 'المنطقة', 'التاريخ', 'اسم الفرقة',
         'الفئة', 'نوع النشاط', 'اسم النشاط', 'اسم القائد', 'عدد الفتية'
     ]
-    missing = [f for f in required if not data[f]]
+    
+    # التحقق من الحقول الإجبارية فقط
+    missing = [f for f in required if not data.get(f)]
+    
     if missing:
         bot.reply_to(message, f"⚠️ عذراً، لم يتم حفظ التقرير لوجود حقول مفقودة: {', '.join(missing)}")
         return
+   
 
     payload = {
         'date': data['التاريخ'],
