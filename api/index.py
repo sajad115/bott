@@ -7,7 +7,7 @@ from telebot import types
 
 # قراءة التوكن المباشر الخاص بك
 BOT_TOKEN = "8359352188:AAHV0d7p0QpX_5Pt023O4RUhFKxTzpKd9CY"
-GOOGLE_SHEET_URL = "https://script.google.com/macros/s/AKfycbzPTLOKo739xNiEEQ1-WKV9jMLhkm4KWQ7CWbebIQVpLoYdPCJS59wuuecbJtwI4g/exec"
+GOOGLE_SHEET_URL = "https://script.google.com/macros/s/AKfycbzPTLOKo739xNIeEQE1-WKV9jvMLhkvm4KWQ7CWbebIQVpLoYydPCJS59wuuecbJtwI4g/exec"
 
 bot = telebot.TeleBot(BOT_TOKEN, threaded=False)
 app = Flask(__name__)
