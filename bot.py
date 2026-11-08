@@ -12,6 +12,7 @@ GOOGLE_SHEET_URL = "https://script.google.com/macros/s/AKfycbzPTLOKo739xNiEEQ1-W
 bot = telebot.TeleBot(BOT_TOKEN, threaded=False)
 app = Flask(__name__)
 
+# دالة جلب البيانات من Google Apps Script مع إرجاع رسالة الخطأ إن وجدت
 def fetch_data_from_sheet(action, query=""):
     try:
         url = f"{GOOGLE_SHEET_URL}?action={action}&query={query}"
@@ -23,11 +24,12 @@ def fetch_data_from_sheet(action, query=""):
         
         if response.status_code == 200:
             data = response.json()
-            return data if data.get("success") else None
+            return data
     except Exception as e:
         print(f"Error fetching sheet: {e}")
-    return None
+    return {"success": False, "message": "خطأ في الاتصال بالرابط"}
 
+# مسار استقبال الـ Webhook من تيليجرام
 @app.route(f"/{BOT_TOKEN}", methods=["POST"])
 def webhook():
     if request.headers.get('content-type') == 'application/json':
@@ -38,24 +40,26 @@ def webhook():
     else:
         return 'Forbidden', 403
 
-# دالة التعامل مع أمر /stats
+# دالة التعامل مع أمر /stats لجلب وعرض الإحصائيات
 @bot.message_handler(commands=['stats'])
 def send_stats(message):
     bot.reply_to(message, "⏳ جاري جلب الإحصائيات من الجوجل شيت...")
     data = fetch_data_from_sheet("get_stats")
     
-    if data and "results" in data and data["results"]:
+    if data and data.get("success") and "results" in data and data["results"]:
         results = data["results"]
         response_text = "📊 **إحصائيات المناطق:**\n\n"
         for item in results:
-            response_text += f"🔹 {item['category']}: **{item['count']}**\n"
+            response_text += f"🔹 {item.get('category', 'أخرى')}: **{item.get('count', 0)}**\n"
         bot.send_message(message.chat.id, response_text, parse_mode="Markdown")
     else:
-        bot.send_message(message.chat.id, "⚠️ عذراً، حدث خطأ أثناء جلب البيانات أو أن الشيت فارغ.")
+        error_msg = data.get("message") or data.get("error") if data else "الشيت فارغ أو لم يتم العثور على بيانات"
+        bot.send_message(message.chat.id, f"⚠️ تنبيه: {error_msg}")
 
+# دالة الترحيب والأوامر العامة
 @bot.message_handler(commands=['start', 'help'])
 def send_welcome(message):
-    bot.reply_to(message, "مرحباً بك! أرسل الأمر /stats لعرض الإحصائيات من شيت البيانات.")
+    bot.reply_to(message, "مرحباً بك! أرسل الأمر /stats لعرض الإحصائيات مباشرة من شيت البيانات.")
 
 if __name__ == "__main__":
     app.run()
