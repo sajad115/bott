@@ -8,9 +8,8 @@ import telebot
 from telebot import types
 
 # ===== الإعدادات (من متغيرات البيئة) =====
-BOT_TOKEN = os.environ["BOT_TOKEN"]
-GOOGLE_SHEET_URL = os.environ["GOOGLE_SHEET_URL"].strip()
-
+BOT_TOKEN ="8359352188:AAHV0d7p0QpX_5Pt023O4RUhFKxTzpKd9CY"
+GOOGLE_SHEET_URL = "https://script.google.com/macros/s/AKfycbzPTLOKo739xNIeEQE1-WKV9jvMLhkvm4KWQ7CWbebIQVpLoYydPCJS59wuuecbJtwI4g/exec"
 bot = telebot.TeleBot(BOT_TOKEN, threaded=False)
 app = Flask(__name__)
 
