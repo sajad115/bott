@@ -16,9 +16,10 @@ app = Flask(__name__)
 # --- دالة مساعدة لجلب البيانات من Google Sheets ---
 def fetch_data_from_sheet(action, query=""):
     try:
-        response = requests.get(f"{GOOGLE_SHEET_URL}?action={action}&query={query}", timeout=10)
+        response = requests.get(f"{GOOGLE_SHEET_URL}?action={action}&query={query}", timeout=15)
         if response.status_code == 200:
-            return response.json()
+            data = response.json()
+            return data
     except Exception as e:
         print(f"Error fetching data: {e}")
     return None
