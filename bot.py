@@ -16,18 +16,17 @@ app = Flask(__name__)
 def fetch_data_from_sheet(action, query=""):
     try:
         url = f"{GOOGLE_SHEET_URL}?action={action}&query={query}"
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-            'Accept': 'application/json'
-        }
-        response = requests.get(url, headers=headers, allow_redirects=True, timeout=15)
+        print(f"Requesting URL: {url}")  # سيطبع الرابط في سجلات Vercel
+        response = requests.get(url, timeout=20)
+        print(f"Response Status Code: {response.status_code}")
+        print(f"Response Text: {response.text[:200]}") # يطبع أول 200 حرف من الرد
         
         if response.status_code == 200:
-            data = response.json()
-            return data
+            return response.json()
     except Exception as e:
-        print(f"Error fetching sheet: {e}")
-    return {"success": False, "message": "خطأ في الاتصال بالرابط"}
+        print(f"Exception Error: {str(e)}")
+        return {"success": False, "message": f"خطأ تقني: {str(e)}"}
+    return {"success": False, "message": "فشل الاتصال بالشيت (رمز غير 200)"}
 
 # مسار استقبال الـ Webhook من تيليجرام
 @app.route(f"/{BOT_TOKEN}", methods=["POST"])
