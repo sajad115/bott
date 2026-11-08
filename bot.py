@@ -7,7 +7,7 @@ from telebot import types
 
 BOT_TOKEN = os.environ.get('BOT_TOKEN')
 # رابط الـ Web App الخاص بـ Google Apps Script الذي يقوم بجلب البيانات
-GOOGLE_SHEET_URL = 'https://script.googleusercontent.com/macros/echo?user_content_key=AUkAhnQjJjrFvC1z5P7eb5kp0RNO1fDrNxG6mXNHkRndV-YiBPcweV2jnk7HtdQ5WUBd0xV-_kFkm8BbMDE-4yjzSMC7U8cHx7ouHgZ4IG_kk7rnOVgJT3dCK4aFKw6hyk0KCHqD-SzmN4CKLzmuf9VMP18A2TM9L0G5BVtLyQ1nRSKQrLicXRbEYeY-lxri_trbTRvE-VtagdVcnEWOwg0znxC8w922jtsWqnTHtQDxTSDgwZciZ6wTvxMWBTaao_OKELT7xPlKPJlLrcedqpYtjdxG_Xs1SDbqEHqLwwMOx6QjnBdBt0s&lib=MvCnCdXUlTtuiBaQOIWQy1hYmi7cMwUco'
+GOOGLE_SHEET_URL = 'https://script.google.com/macros/s/AKfycbzPTLOKo739xNIeEQE1-WKV9jvMLhkvm4KWQ7CWbebIQVpLoYydPCJS59wuuecbJtwI4g/exec'
 ADMIN_ID = int(os.environ.get('ADMIN_ID', '1682496497'))
 
 bot = telebot.TeleBot(BOT_TOKEN, threaded=False)
