@@ -17,11 +17,17 @@ app = Flask(__name__)
 def fetch_data_from_sheet(action, query=""):
     try:
         url = f"{GOOGLE_SHEET_URL}?action={action}&query={query}"
-        response = requests.get(url, allow_redirects=True, timeout=15)
+        # إضافة Headers وهمية لكي لا يقوم جوجل برفض الطلب كبوت
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Accept': 'application/json'
+        }
+        response = requests.get(url, headers=headers, allow_redirects=True, timeout=15)
+        print(f"Google Script Status Code: {response.status_code}")
+        print(f"Google Script Response Text: {response.text[:200]}") # طباعة أول 200 حرف من الاستجابة لمعرفة المشكلة
+        
         if response.status_code == 200:
             return response.json()
-        else:
-            print(f"HTTP Status Error: {response.status_code}")
     except Exception as e:
         print(f"Error fetching data: {e}")
     return None
