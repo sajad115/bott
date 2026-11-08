@@ -1,6 +1,7 @@
 import os
 import re
 import html
+import calendar
 from datetime import datetime
 import requests
 from flask import Flask, request
@@ -8,18 +9,26 @@ import telebot
 from telebot import types
 
 # ===== الإعدادات (من متغيرات البيئة) =====
-BOT_TOKEN ="8359352188:AAHV0d7p0QpX_5Pt023O4RUhFKxTzpKd9CY"
-GOOGLE_SHEET_URL = "https://script.google.com/macros/s/AKfycbzPTLOKo739xNIeEQE1-WKV9jvMLhkvm4KWQ7CWbebIQVpLoYydPCJS59wuuecbJtwI4g/exec" 
+BOT_TOKEN = os.environ["BOT_TOKEN"]
+GOOGLE_SHEET_URL = os.environ["GOOGLE_SHEET_URL"].strip()
+
 bot = telebot.TeleBot(BOT_TOKEN, threaded=False)
 app = Flask(__name__)
 
 TITLES = {
     "stats_general": ("get_stats", "📊 <b>الإحصائيات العامة للمناطق:</b>"),
-    "stats_monthly": ("get_monthly", "🗓️ <b>الإحصائيات الشهرية:</b>"),
     "stats_weekly": ("get_weekly", "📅 <b>إحصائيات هذا الأسبوع:</b>"),
 }
 
 DATE_RE = re.compile(r"\d{4}-\d{1,2}-\d{1,2}|\d{1,2}/\d{1,2}/\d{4}")
+
+MONTHS_AR = ["كانون الثاني", "شباط", "آذار", "نيسان", "أيار", "حزيران",
+             "تموز", "آب", "أيلول", "تشرين الأول", "تشرين الثاني", "كانون الأول"]
+
+
+def month_label(ym):
+    y, m = ym.split("-")
+    return f"{MONTHS_AR[int(m) - 1]} {y}"
 
 
 def fetch_data_from_sheet(action="get_stats", extra=None):
@@ -156,6 +165,45 @@ def handle_query(call):
             "أو: <code>01/11/2026 08/11/2026</code>",
             parse_mode="HTML",
         )
+        return
+
+    # عرض الشهور المتوفرة كأزرار
+    if call.data == "stats_monthly":
+        data, error = fetch_data_from_sheet("get_months")
+        if error:
+            bot.send_message(call.message.chat.id, f"⚠️ {html.escape(error)}")
+            return
+        months = [i for i in data["results"]
+                  if re.fullmatch(r"\d{4}-\d{2}", str(i.get("category", "")))]
+        months.sort(key=lambda x: x["category"], reverse=True)
+        months = months[:12]
+        if not months:
+            bot.send_message(call.message.chat.id, "ما لقيت شهور بالشيت.")
+            return
+        markup = types.InlineKeyboardMarkup(row_width=2)
+        markup.add(*[
+            types.InlineKeyboardButton(
+                f"{month_label(i['category'])} ({i['count']})",
+                callback_data="month_" + i["category"],
+            ) for i in months
+        ])
+        bot.send_message(call.message.chat.id, "🗓️ <b>اختر الشهر:</b>",
+                         reply_markup=markup, parse_mode="HTML")
+        return
+
+    # إحصائيات الشهر المختار
+    if call.data.startswith("month_"):
+        ym = call.data[len("month_"):]
+        y, m = map(int, ym.split("-"))
+        last = calendar.monthrange(y, m)[1]
+        data, error = fetch_data_from_sheet(
+            "get_range", {"from": f"{y}-{m:02d}-01", "to": f"{y}-{m:02d}-{last}"}
+        )
+        if error:
+            bot.send_message(call.message.chat.id, f"⚠️ {html.escape(error)}")
+            return
+        send_long(call.message.chat.id,
+                  build_text(f"🗓️ <b>إحصائيات {month_label(ym)}:</b>", data))
         return
 
     action, title = TITLES.get(call.data, TITLES["stats_general"])
