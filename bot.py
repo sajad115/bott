@@ -1,13 +1,15 @@
 import os
+import re
 import html
+from datetime import datetime
 import requests
 from flask import Flask, request
 import telebot
 from telebot import types
 
 # ===== الإعدادات (من متغيرات البيئة) =====
-BOT_TOKEN ="8359352188:AAHV0d7p0QpX_5Pt023O4RUhFKxTzpKd9CY"
-GOOGLE_SHEET_URL = "https://script.google.com/macros/s/AKfycbzPTLOKo739xNIeEQE1-WKV9jvMLhkvm4KWQ7CWbebIQVpLoYydPCJS59wuuecbJtwI4g/exec"
+BOT_TOKEN = os.environ["BOT_TOKEN"]
+GOOGLE_SHEET_URL = os.environ["GOOGLE_SHEET_URL"].strip()
 
 bot = telebot.TeleBot(BOT_TOKEN, threaded=False)
 app = Flask(__name__)
@@ -15,18 +17,20 @@ app = Flask(__name__)
 TITLES = {
     "stats_general": ("get_stats", "📊 <b>الإحصائيات العامة للمناطق:</b>"),
     "stats_monthly": ("get_monthly", "🗓️ <b>الإحصائيات الشهرية:</b>"),
-    "stats_weekly": ("get_weekly", "📅 <b>الإحصائيات الأسبوعية:</b>"),
+    "stats_weekly": ("get_weekly", "📅 <b>إحصائيات هذا الأسبوع:</b>"),
 }
 
+DATE_RE = re.compile(r"\d{4}-\d{1,2}-\d{1,2}|\d{1,2}/\d{1,2}/\d{4}")
 
-def fetch_data_from_sheet(action="get_stats"):
-    """يرجّع (results, error). إذا صار فشل يرجّع error بدل رقم وهمي."""
+
+def fetch_data_from_sheet(action="get_stats", extra=None):
+    """يرجّع (data, error). إذا صار فشل يرجّع error بدل رقم وهمي."""
+    params = {"action": action}
+    if extra:
+        params.update(extra)
     try:
         response = requests.get(
-            GOOGLE_SHEET_URL,
-            params={"action": action},
-            timeout=30,
-            allow_redirects=True,
+            GOOGLE_SHEET_URL, params=params, timeout=30, allow_redirects=True
         )
         print("STATUS:", response.status_code)
         print("BODY:", response.text[:300])
@@ -37,18 +41,14 @@ def fetch_data_from_sheet(action="get_stats"):
         try:
             data = response.json()
         except ValueError:
-            return None, (
-                "الرد مو JSON. غالباً النشر مو بصلاحية «أي شخص» "
-                "أو الرابط قديم."
-            )
+            return None, "الرد مو JSON. تأكد من رابط النشر وصلاحية «أي شخص»."
 
         if not data.get("success"):
-            return None, "السكربت رجّع success=false"
+            return None, "السكربت رجّع خطأ: " + str(data.get("error", ""))
 
-        results = data.get("results", [])
-        if not results:
+        if not data.get("results"):
             return None, "ما وصلت بيانات من الشيت"
-        return results, None
+        return data, None
 
     except requests.exceptions.Timeout:
         return None, "انتهت مهلة الاتصال بالشيت"
@@ -57,8 +57,8 @@ def fetch_data_from_sheet(action="get_stats"):
         return None, f"خطأ: {e}"
 
 
-def build_text(title, results):
-    """يبني النص: العناصر مرتبة، والإجمالي بالآخر."""
+def build_text(title, data):
+    results = data.get("results", [])
     total_item = None
     items = []
     for item in results:
@@ -67,13 +67,20 @@ def build_text(title, results):
         else:
             items.append(item)
 
-    # الأسبوعي والشهري يترتبون بالاسم (تاريخ)، العام بالعدد
-    items.sort(key=lambda x: x.get("category", ""))
+    # الأكثر عدداً أولاً
+    items.sort(key=lambda x: x.get("count", 0), reverse=True)
 
-    lines = [title, ""]
+    lines = [title]
+    if data.get("period"):
+        lines.append(f"🗓️ الفترة: {html.escape(data['period'])}")
+    lines.append("")
+
+    if not items:
+        lines.append("ما توجد بيانات بهذي الفترة.")
     for item in items:
         cat = html.escape(str(item.get("category", "أخرى")))
         lines.append(f"🔹 {cat}: <b>{item.get('count', 0)}</b>")
+
     if total_item:
         lines.append("")
         lines.append(f"✅ الإجمالي: <b>{total_item.get('count', 0)}</b>")
@@ -90,6 +97,15 @@ def send_long(chat_id, lines):
         chunk += line + "\n"
     if chunk.strip():
         bot.send_message(chat_id, chunk, parse_mode="HTML")
+
+
+def normalize_date(s):
+    """يقبل 2026-11-01 أو 01/11/2026 ويرجّع yyyy-MM-dd"""
+    if "-" in s:
+        y, m, d = s.split("-")
+    else:
+        d, m, y = s.split("/")
+    return datetime(int(y), int(m), int(d)).strftime("%Y-%m-%d")
 
 
 @app.route("/")
@@ -118,7 +134,8 @@ def stats_menu(message):
     markup.add(
         types.InlineKeyboardButton("📊 الإحصائيات العامة للمناطق", callback_data="stats_general"),
         types.InlineKeyboardButton("🗓️ الإحصائيات الشهرية", callback_data="stats_monthly"),
-        types.InlineKeyboardButton("📅 الإحصائيات الأسبوعية", callback_data="stats_weekly"),
+        types.InlineKeyboardButton("📅 إحصائيات هذا الأسبوع", callback_data="stats_weekly"),
+        types.InlineKeyboardButton("📆 بين تاريخين", callback_data="stats_range"),
     )
     bot.send_message(
         message.chat.id,
@@ -132,14 +149,43 @@ def stats_menu(message):
 def handle_query(call):
     bot.answer_callback_query(call.id)
 
+    if call.data == "stats_range":
+        bot.send_message(
+            call.message.chat.id,
+            "📆 ارسل التاريخين بهالشكل:\n\n"
+            "<code>2026-11-01 2026-11-08</code>\n\n"
+            "أو: <code>01/11/2026 08/11/2026</code>",
+            parse_mode="HTML",
+        )
+        return
+
     action, title = TITLES.get(call.data, TITLES["stats_general"])
-    results, error = fetch_data_from_sheet(action)
+    data, error = fetch_data_from_sheet(action)
 
     if error:
         bot.send_message(call.message.chat.id, f"⚠️ {html.escape(error)}")
         return
 
-    send_long(call.message.chat.id, build_text(title, results))
+    send_long(call.message.chat.id, build_text(title, data))
+
+
+# أي رسالة نصية فيها تاريخين = طلب إحصائيات بين تاريخين
+@bot.message_handler(func=lambda m: bool(m.text) and len(DATE_RE.findall(m.text)) == 2)
+def handle_range(message):
+    raw_from, raw_to = DATE_RE.findall(message.text)
+    try:
+        date_from = normalize_date(raw_from)
+        date_to = normalize_date(raw_to)
+    except ValueError:
+        bot.reply_to(message, "⚠️ التاريخ غير صحيح. مثال: 2026-11-01 2026-11-08")
+        return
+
+    data, error = fetch_data_from_sheet("get_range", {"from": date_from, "to": date_to})
+    if error:
+        bot.reply_to(message, f"⚠️ {html.escape(error)}")
+        return
+
+    send_long(message.chat.id, build_text("📆 <b>الإحصائيات بين تاريخين:</b>", data))
 
 
 if __name__ == "__main__":
