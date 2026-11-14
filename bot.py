@@ -9,7 +9,7 @@ import telebot
 from telebot import types
 
 # ===== الإعدادات (من متغيرات البيئة) =====
-BOT_TOKEN ="8359352188:AAFL0xbcUVORd077j7M0XK6ZnRGM8697_8E"
+BOT_TOKEN ="9171384728:AAEAnj85ou-MxQup4slYYpTa6Rtar0S-AB4"
 GOOGLE_SHEET_URL = "https://script.google.com/macros/s/AKfycbzPTLOKo739xNIeEQE1-WKV9jvMLhkvm4KWQ7CWbebIQVpLoYydPCJS59wuuecbJtwI4g/exec" 
 
 bot = telebot.TeleBot(BOT_TOKEN, threaded=False)
