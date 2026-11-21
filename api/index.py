@@ -148,6 +148,18 @@ def webhook():
     return "", 200
 
 
+@app.route("/set_webhook")
+def set_webhook():
+    """يضبط الـ webhook من سيرفر فيرسل نفسه (مفيد إذا تيليغرام محجوب عندك).
+    الاستخدام: /set_webhook?key=<WEBHOOK_SECRET>"""
+    key = request.args.get("key", "")
+    if not hmac.compare_digest(key, WEBHOOK_SECRET):
+        return "Forbidden", 403
+    url = "https://" + request.host + "/webhook"
+    ok = bot.set_webhook(url=url, secret_token=WEBHOOK_SECRET)
+    return f"Webhook set: {ok}", 200
+
+
 @bot.message_handler(commands=["start", "help"], func=lambda m: is_allowed(m.from_user))
 def send_welcome(message):
     bot.reply_to(message, "مرحباً بك! أرسل الأمر /stats لعرض لوحة الإحصائيات.")
