@@ -1,6 +1,7 @@
 import os
 import re
 import html
+import hmac
 import calendar
 from datetime import datetime
 import requests
@@ -8,9 +9,15 @@ from flask import Flask, request
 import telebot
 from telebot import types
 
-# ===== الإعدادات (من متغيرات البيئة) =====
-BOT_TOKEN ="9171384728:AAEAnj85ou-MxQup4slYYpTa6Rtar0S-AB4"
-GOOGLE_SHEET_URL = "https://script.google.com/macros/s/AKfycbzPTLOKo739xNIeEQE1-WKV9jvMLhkvm4KWQ7CWbebIQVpLoYydPCJS59wuuecbJtwI4g/exec" 
+# ===== الإعدادات (كلها من متغيرات البيئة، لا تكتب أي سر بالكود) =====
+BOT_TOKEN = os.environ["BOT_TOKEN"]
+GOOGLE_SHEET_URL = os.environ["GOOGLE_SHEET_URL"]
+WEBHOOK_SECRET = os.environ["WEBHOOK_SECRET"]      # حروف وأرقام و _ - فقط
+SHEET_KEY = os.environ.get("SHEET_KEY", "")         # مفتاح يتحقق منه سكربت جوجل
+# آيديات المسموح لهم، مفصولة بفاصلة: 123456789,987654321 (فاضي = الكل مسموح)
+ALLOWED_IDS = {
+    int(x) for x in os.environ.get("ALLOWED_IDS", "").split(",") if x.strip().isdigit()
+}
 
 bot = telebot.TeleBot(BOT_TOKEN, threaded=False)
 app = Flask(__name__)
@@ -26,6 +33,11 @@ MONTHS_AR = ["كانون الثاني", "شباط", "آذار", "نيسان", "�
              "تموز", "آب", "أيلول", "تشرين الأول", "تشرين الثاني", "كانون الأول"]
 
 
+def is_allowed(user):
+    """إذا ما حددت ALLOWED_IDS يسمح للكل."""
+    return not ALLOWED_IDS or (user is not None and user.id in ALLOWED_IDS)
+
+
 def month_label(ym):
     y, m = ym.split("-")
     return f"{MONTHS_AR[int(m) - 1]} {y}"
@@ -34,6 +46,8 @@ def month_label(ym):
 def fetch_data_from_sheet(action="get_stats", extra=None):
     """يرجّع (data, error). إذا صار فشل يرجّع error بدل رقم وهمي."""
     params = {"action": action}
+    if SHEET_KEY:
+        params["key"] = SHEET_KEY
     if extra:
         params.update(extra)
     try:
@@ -41,7 +55,6 @@ def fetch_data_from_sheet(action="get_stats", extra=None):
             GOOGLE_SHEET_URL, params=params, timeout=30, allow_redirects=True
         )
         print("STATUS:", response.status_code)
-        print("BODY:", response.text[:300])
 
         if response.status_code != 200:
             return None, f"خطأ HTTP {response.status_code}"
@@ -61,8 +74,8 @@ def fetch_data_from_sheet(action="get_stats", extra=None):
     except requests.exceptions.Timeout:
         return None, "انتهت مهلة الاتصال بالشيت"
     except Exception as e:
-        print(f"Error: {e}")
-        return None, f"خطأ: {e}"
+        print(f"Error: {type(e).__name__}")
+        return None, "صار خطأ بالاتصال بالشيت"
 
 
 def build_text(title, data):
@@ -123,20 +136,24 @@ def index():
 
 @app.route("/webhook", methods=["POST"])
 def webhook():
-    if request.headers.get("content-type") == "application/json":
-        json_string = request.get_data().decode("utf-8")
-        update = telebot.types.Update.de_json(json_string)
-        bot.process_new_updates([update])
-        return "", 200
-    return "Forbidden", 403
+    # تحقق إن الطلب جاي من تيليغرام فعلاً
+    token = request.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
+    if not hmac.compare_digest(token, WEBHOOK_SECRET):
+        return "Forbidden", 403
+    if request.headers.get("content-type") != "application/json":
+        return "Forbidden", 403
+    json_string = request.get_data().decode("utf-8")
+    update = telebot.types.Update.de_json(json_string)
+    bot.process_new_updates([update])
+    return "", 200
 
 
-@bot.message_handler(commands=["start", "help"])
+@bot.message_handler(commands=["start", "help"], func=lambda m: is_allowed(m.from_user))
 def send_welcome(message):
     bot.reply_to(message, "مرحباً بك! أرسل الأمر /stats لعرض لوحة الإحصائيات.")
 
 
-@bot.message_handler(commands=["stats"])
+@bot.message_handler(commands=["stats"], func=lambda m: is_allowed(m.from_user))
 def stats_menu(message):
     markup = types.InlineKeyboardMarkup(row_width=1)
     markup.add(
@@ -156,6 +173,9 @@ def stats_menu(message):
 @bot.callback_query_handler(func=lambda call: True)
 def handle_query(call):
     bot.answer_callback_query(call.id)
+
+    if not is_allowed(call.from_user):
+        return
 
     if call.data == "stats_range":
         bot.send_message(
@@ -194,6 +214,8 @@ def handle_query(call):
     # إحصائيات الشهر المختار
     if call.data.startswith("month_"):
         ym = call.data[len("month_"):]
+        if not re.fullmatch(r"\d{4}-\d{2}", ym):
+            return
         y, m = map(int, ym.split("-"))
         last = calendar.monthrange(y, m)[1]
         data, error = fetch_data_from_sheet(
@@ -217,7 +239,9 @@ def handle_query(call):
 
 
 # أي رسالة نصية فيها تاريخين = طلب إحصائيات بين تاريخين
-@bot.message_handler(func=lambda m: bool(m.text) and len(DATE_RE.findall(m.text)) == 2)
+@bot.message_handler(
+    func=lambda m: is_allowed(m.from_user) and bool(m.text) and len(DATE_RE.findall(m.text)) == 2
+)
 def handle_range(message):
     raw_from, raw_to = DATE_RE.findall(message.text)
     try:
